@@ -21,11 +21,6 @@ def main():
     limit = args.limit
     session = requests.Session()
 
-    # To prevent debugging issues later
-    if url[:6] != "http://":
-        logger.info("\n (-) FAILURE: prefix your url with `http://`")
-        return
-
     logger.info("Starting demo client")
     
     # Create bench
