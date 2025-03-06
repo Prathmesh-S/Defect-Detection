@@ -6,6 +6,10 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 from PIL import Image
 import io
+import os
+
+from dotenv import load_dotenv
+load_dotenv()  
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,12 +25,16 @@ def main():
     limit = args.limit
     session = requests.Session()
 
+    API_TOKEN = "polimi-deib"
     logger.info("Starting demo client")
+
+    if url == "http://challenge2025.debs.org:52923":
+        API_TOKEN = os.getenv("API_KEY")
     
     # Create bench
     create_response = session.post(
         f"{url}/api/create",
-        json={"apitoken": "polimi-deib", "name":"unoptimized", "test": True, "max_batches": limit},
+        json={"apitoken": API_TOKEN, "name":"unoptimized", "test": True, "max_batches": limit},
     )
     create_response.raise_for_status()
     bench_id = create_response.json()
