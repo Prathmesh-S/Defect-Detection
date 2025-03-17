@@ -3,61 +3,121 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.json.*;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessageUnpacker;
 import org.msgpack.value.Value;
+import org.apache.flink.api.common.typeinfo.TypeHint;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.EventTimeSessionWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
 
-
+//ClientRef is in charge of collecting our data in a sink, running our pipeline, and outputting our results
 public class ClientRef {
+
     private static final String API_TOKEN = "polimi-deib";
 
     public static void main(String[] args) throws Exception {
-        String endpoint = args[0]; // Passed as a command-line argument
-        int limit = args.length > 1 ? Integer.parseInt(args[1]) : -1;
 
-        HttpURLConnection conn;
-        String benchId = createBench(endpoint, limit);
-        startBench(endpoint, benchId);
+        //Create our data source in Flink
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        int i = 0;
-        while (limit == -1 || i < limit) {
-            JSONObject batch = getNextBatch(endpoint, benchId);
-            if (batch == null) break;
+        //Process our raw API Data to get our response Objects
+        env.addSource(new ApiSource(args))
+                .name("Faucet")
+                .map(batch -> {
+                    JSONObject result = new JSONObject();
+                    result.put("batch_id", batch.get("batch_id").toString());
+                    result.put("print_id", batch.get("print_id").toString());
+                    result.put("tile_id", batch.get("tile_id").toString());
+                    result.put("layer", batch.getInt("layer"));
 
-            JSONObject result = process(batch);
-            sendResult(endpoint, benchId, i, result);
-            i++;
-        }
+                    //TODO: Decode Image Data
+                    //Object tifObject = batch.get("tif");
 
-        endBench(endpoint, benchId);
+                    //Dummy output results.
+                    result.put("saturated", 0);
+                    result.put("centroids", new JSONArray());
+
+                    System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
+                    return result;
+                });
+
+        env.execute("Benchmark");
     }
 
-    private static String createBench(String endpoint, int limit) throws Exception {
+    //Private class to create our data flink Source
+    private static class ApiSource extends RichSourceFunction<JSONObject> {
+        private volatile boolean isRunning = true;
+        private final String[] args;
+
+        private ApiSource(String[] args) {
+            this.args = args;
+        }
+
+        //The Run method will loop to get all of our Batch data
+        @Override
+        public void run(SourceContext<JSONObject> ctx) throws Exception {
+            String endpoint = args[0];
+            String benchId = createBench(endpoint);
+            startBench(endpoint, benchId);
+
+            //Collect batches and break if we finish.
+            while (isRunning) {
+                JSONObject batch;
+                try {
+                    batch = getNextBatch(endpoint, benchId);
+                } catch (JSONException e) {
+                    System.out.println("Stopping - Invalid JSON response");
+                    break;
+                }
+                ctx.collect(batch);
+            }
+
+            //When we exit the loop, we are done with the entire benchmark.
+            endBench(endpoint, benchId);
+        }
+
+        //Called by Flink when needed to end the benchmark
+        @Override
+        public void cancel() {
+            isRunning = false;
+        }
+    }
+
+    //Creates a benchmark.
+    private static String createBench(String endpoint) throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("apitoken", API_TOKEN);
         payload.put("name", "unoptimized");
         payload.put("test", true);
         payload.put("max_batches", JSONObject.NULL);
 
+        //Get our response + clean it up.
         String response = sendPostRequest(endpoint + "/api/create", payload.toString());
         response = response.trim();
-        // If response starts with '{', assume it's JSON; otherwise, it's plain text.
-        if (response.startsWith("{")) {
-            return new JSONObject(response).getString("bench_id");
-        } else {
-            // If response is plain text, remove any wrapping quotes.
-            if (response.startsWith("\"") && response.endsWith("\"")) {
-                response = response.substring(1, response.length() - 1);
-            }
-            return response;
-        }
+        response = response.substring(1, response.length() - 1);
+
+        return response;
     }
 
+    //Actually start the benchmark.
     private static void startBench(String endpoint, String benchId) throws Exception {
         sendPostRequest(endpoint + "/api/start/" + benchId, "");
     }
 
+    //Get the next batch in the benchmark.
     private static JSONObject getNextBatch(String endpoint, String benchId) throws Exception {
         byte[] responseBytes = sendGetRequestBytes(endpoint + "/api/next_batch/" + benchId);
 
@@ -68,11 +128,10 @@ public class ClientRef {
 
         // Convert MessagePack value to JSON string
         String jsonString = value.toJson();
-
         return new JSONObject(jsonString);
     }
 
-    // New method to get raw bytes from GET request
+    //Helper method to send the GetRequest for our next batch in the benchmark.
     private static byte[] sendGetRequestBytes(String url) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
@@ -94,21 +153,19 @@ public class ClientRef {
         return buffer.toByteArray();
     }
 
-    private static void sendResult(String endpoint, String benchId, int i, JSONObject result) throws Exception {
-        sendPostRequest(endpoint + "/api/result/0/" + benchId + "/" + i, result.toString());
-    }
-
+    //Request to end the benchmark.
     private static void endBench(String endpoint, String benchId) throws Exception {
         sendPostRequest(endpoint + "/api/end/" + benchId, "");
     }
 
+    //Helper method to sent Post Request to end the benchmark.
     private static String sendPostRequest(String url, String jsonPayload) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         conn.setDoOutput(true);
 
-        System.out.println("Processing this URL now: " + url);
+        System.out.println("Ending the benchmark.");
 
         // Write the JSON payload to the request body.
         try (OutputStream os = conn.getOutputStream()) {
@@ -137,37 +194,6 @@ public class ClientRef {
         }
 
         return response.toString();
-    }
-
-    private static JSONObject process(JSONObject batch) throws IOException {
-        JSONObject result = new JSONObject();
-        result.put("batch_id", batch.get("batch_id").toString());
-        result.put("print_id", batch.get("print_id").toString());
-        result.put("tile_id", batch.get("tile_id").toString());
-        result.put("layer", batch.getInt("layer"));
-
-        //TODO: Decode Image Data
-        Object tifObject = batch.get("tif");
-        byte[] imageBytes;
-
-        if (tifObject instanceof String) {
-            // If it's mistakenly stored as a string, convert it back
-            imageBytes = ((String) tifObject).getBytes(StandardCharsets.ISO_8859_1);
-        } else if (tifObject instanceof byte[]) {
-            imageBytes = (byte[]) tifObject;
-        } else {
-            throw new RuntimeException("Unknown type for 'tif'");
-        }
-
-// Print raw bytes
-        System.out.println(Arrays.toString(imageBytes));
-        System.exit(0);
-
-        result.put("saturated", 0);
-
-        result.put("centroids", new JSONArray());
-
-        return result;
     }
 
 }
