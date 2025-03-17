@@ -43,16 +43,54 @@ public class ClientRef {
                     result.put("tile_id", batch.get("tile_id").toString());
                     result.put("layer", batch.getInt("layer"));
 
-                    //TODO: Decode Image Data
+                    //TODO: Decode Image Data Correctly
                     //Object tifObject = batch.get("tif");
 
+                    //Use Fake data for now. This creates an image where the top-left quadrant is all above the threshold, with all other values being 1.
+                    int rows = 100;
+                    int cols = 100;
+                    int[][] image = new int[rows][cols];
+
+                    // Initialize ALL elements to 1
+                    for (int[] row : image) {
+                        Arrays.fill(row, 1);
+                    }
+
+                    // Top-left quadrant dimensions
+                    int qRows = rows / 2;    // 125,000
+                    int qCols = cols / 2;    // 250
+
+                    for (int i = 0; i < qRows; i++) {
+                        for (int j = 0; j < qCols; j++) {
+                            image[i][j] = 65001;
+                        }
+                    }
+                    result.put("image", new JSONArray(image));
+
                     //Dummy output results.
-                    result.put("saturated", 0);
                     result.put("centroids", new JSONArray());
 
                     System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
                     return result;
-                });
+                }).map(batch -> {
+                    //Count Saturated points for each batch
+                    JSONArray imageArray = batch.getJSONArray("image");
+                    int saturatedCount = 0;
+
+                    // Scan entire 2D array
+                    for (int i = 0; i < imageArray.length(); i++) {
+                        JSONArray row = imageArray.getJSONArray(i);
+                        for (int j = 0; j < row.length(); j++) {
+                            if (row.getInt(j) > 65000) {
+                                saturatedCount++;
+                            }
+                        }
+                    }
+
+                    batch.put("saturated", saturatedCount);
+                    return batch;
+
+                }).print();
 
         env.execute("Benchmark");
     }
@@ -164,8 +202,6 @@ public class ClientRef {
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         conn.setDoOutput(true);
-
-        System.out.println("Ending the benchmark.");
 
         // Write the JSON payload to the request body.
         try (OutputStream os = conn.getOutputStream()) {
