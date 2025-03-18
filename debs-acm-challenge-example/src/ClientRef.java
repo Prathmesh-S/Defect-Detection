@@ -1,9 +1,17 @@
+import java.awt.*;
 import java.awt.image.Raster;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.List;
+
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.ListStateDescriptor;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.json.*;
 import org.msgpack.core.MessagePack;
@@ -32,9 +40,8 @@ public class ClientRef {
 
         //Create our data source in Flink
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-
         //Process our raw API Data to get our response Objects
-        env.addSource(new ApiSource(args))
+        DataStream<JSONObject> apiData = env.addSource(new ApiSource(args))
                 .name("Faucet")
                 .map(batch -> {
                     JSONObject result = new JSONObject();
@@ -47,8 +54,8 @@ public class ClientRef {
                     //Object tifObject = batch.get("tif");
 
                     //Use Fake data for now. This creates an image where the top-left quadrant is all above the threshold, with all other values being 1.
-                    int rows = 100;
-                    int cols = 100;
+                    int rows = 10;
+                    int cols = 10;
                     int[][] image = new int[rows][cols];
 
                     // Initialize ALL elements to 1
@@ -70,9 +77,13 @@ public class ClientRef {
                     //Dummy output results.
                     result.put("centroids", new JSONArray());
 
-                    System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
+                    //System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
                     return result;
-                }).map(batch -> {
+                });
+
+        //Stream to find saturated points per tile
+        DataStream<JSONObject> apiDataWithSatPoints = apiData
+                .map(batch -> {
                     //Count Saturated points for each batch
                     JSONArray imageArray = batch.getJSONArray("image");
                     int saturatedCount = 0;
@@ -90,8 +101,50 @@ public class ClientRef {
                     batch.put("saturated", saturatedCount);
                     return batch;
 
-                }).print();
+                });
 
+        //Create Window logic to store past three inclusive tiles for each tile that arrives.
+        //Output is Tuple of : JSON Tile Object itself for layer x, List of JSONObjects for the tiles for layer x, x-1,and x-2.
+        DataStream<Tuple2<JSONObject, List<JSONObject>>> apiDataWithOutlierDetection = apiDataWithSatPoints
+                .keyBy(batch ->
+                        batch.getString("tile_id")
+                ).process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
+
+                    //Store last three layers/tileID
+                    private transient ListState<JSONObject> windowState;
+
+                    @Override
+                    public void open(Configuration parameters) {
+                        windowState = getRuntimeContext().getListState(
+                                new ListStateDescriptor<>("layerWindow", JSONObject.class));
+                    }
+
+                    @Override
+                    public void processElement(
+                            JSONObject batch,
+                            Context ctx,
+                            Collector<Tuple2<JSONObject, List<JSONObject>>> out) throws Exception {
+
+                        // Get current window state
+                        List<JSONObject> window = new ArrayList<>();
+                        windowState.get().forEach(window::add);
+
+                        // Add new batch to window
+                        window.add(batch);
+
+                        // Trim to last 3 layers
+                        if(window.size() > 3) {
+                            window = new ArrayList<>(window.subList(window.size() - 3, window.size()));
+                        }
+
+                        // Update state and emit
+                        windowState.update(window);
+                        out.collect(Tuple2.of(batch, window));
+                    }
+                });
+
+
+        //Run the program.
         env.execute("Benchmark");
     }
 
