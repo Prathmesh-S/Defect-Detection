@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 import logging
 import requests
 import umsgpack
@@ -34,8 +35,9 @@ def main():
     PARAMS = {
         "apitoken": API_TOKEN,
         "test": True,
-        "name": "unoptimized"
+        "name": f"unoptimized-{datetime.today().strftime('%Y-%m-%d %H:%M:%S')}"
     }
+    
 
     PARAMS_GIVEN_IN_SAMPLE_CODE = {"apitoken": API_TOKEN, "name":"unoptimized", "test": True, "max_batches": limit, "queries": [0]}
     
