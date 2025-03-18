@@ -18,7 +18,7 @@ logger = logging.getLogger("demo_client")
 def main():
     parser = argparse.ArgumentParser(description="Demo Client")
     parser.add_argument("endpoint", type=str, help="Endpoint URL")
-    parser.add_argument("--limit", type=int, default=None, help="Maximum number of batches to process")
+    parser.add_argument("--limit", type=int, help="Maximum number of batches to process") # add `default = 10` to only test 10 batches
     args = parser.parse_args()
 
     url = args.endpoint
@@ -30,11 +30,19 @@ def main():
 
     if url == "http://challenge2025.debs.org:52923":
         API_TOKEN = os.getenv("API_KEY")
+
+    PARAMS = {
+        "apitoken": API_TOKEN,
+        "test": True,
+        "name": "unoptimized"
+    }
+
+    PARAMS_GIVEN_IN_SAMPLE_CODE = {"apitoken": API_TOKEN, "name":"unoptimized", "test": True, "max_batches": limit, "queries": [0]}
     
     # Create bench
     create_response = session.post(
         f"{url}/api/create",
-        json={"apitoken": API_TOKEN, "name":"unoptimized", "test": True, "max_batches": limit},
+        json=PARAMS,
     )
     create_response.raise_for_status()
     bench_id = create_response.json()
