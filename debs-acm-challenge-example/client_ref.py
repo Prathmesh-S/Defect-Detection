@@ -81,7 +81,6 @@ def main():
     result = end_response.text
     logger.info(f"Completed bench {bench_id}")
 
-    print(f"Result: {result}")
 
 def compute_outliers(image3d, empty_threshold, saturation_threshold, distance_threshold, outlier_threshold):
     image3d = image3d.astype(np.float64)

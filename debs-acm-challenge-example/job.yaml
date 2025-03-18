@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: python-sample-solution-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: python-sample-solution-container
+        image: omariani24/python-example-solution:latest
+        env:
+          - name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: api-secret
+                key: API_KEY
+        command: ["python", "./client_ref.py", "http://challenge2025.debs.org:52923"]
+      restartPolicy: Never
+  backoffLimit: 3
