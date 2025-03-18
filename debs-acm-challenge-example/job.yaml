@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: python-sample-solution-job
-  namespace: bu-debs-dubs-python-solution
+  namespace: group-4
 spec:
   template:
     spec:

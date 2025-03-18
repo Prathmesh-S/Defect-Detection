@@ -5,6 +5,9 @@
 # Delete Job if it already exists
 # kubectl delete job <job_name>
 
+# Make namespace if not already exists
+kubectl create namespace group-4
+
 # Create Job from `job.yaml`
 # kubectl apply -f ../job.yaml
 
