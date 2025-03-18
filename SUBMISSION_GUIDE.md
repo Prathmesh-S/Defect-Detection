@@ -46,6 +46,9 @@ Follow these steps once you have already updated the Docker container on DockerH
 # Add the environment variable for API_KEY (if you haven't already)
 kubectl create secret generic api-secret --from-env-file=.env
 
+# Delete Job if it already exists
+kubectl delete job <job_name>
+
 # Create Job from `job.yaml`
 kubectl apply -f job.yaml
 
