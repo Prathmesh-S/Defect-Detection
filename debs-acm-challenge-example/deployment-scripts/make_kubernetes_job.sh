@@ -6,7 +6,7 @@
 # kubectl delete job <job_name>
 
 # Create Job from `job.yaml`
-kubectl apply -f ../job.yaml
+# kubectl apply -f ../job.yaml
 
 # Create Job for deployment `SUBMIT_TO_EVAL_job.yaml`
 kubectl apply -f ../SUBMIT_TO_EVAL_job.yaml

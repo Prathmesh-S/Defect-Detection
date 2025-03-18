@@ -26,11 +26,8 @@ def main():
     limit = args.limit
     session = requests.Session()
 
-    API_TOKEN = "polimi-deib"
+    API_TOKEN = os.getenv("API_KEY", "polimi-deib")
     logger.info("Starting demo client")
-
-    if url == "http://challenge2025.debs.org:52923":
-        API_TOKEN = os.getenv("API_KEY")
 
     PARAMS = {
         "apitoken": API_TOKEN,
