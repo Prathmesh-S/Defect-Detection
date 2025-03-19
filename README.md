@@ -4,7 +4,8 @@
 
 `/debs-acm-challenge-example` - the example given by the organizing body
 
-- follow [/debs-acm-challenge-example/README](/debs-acm-challenge-example/README) for how to run it
+- follow [/debs-acm-challenge-example/README](./debs-acm-challenge-example/README.md) for how to run the docker container with the data
+- follow [/debs-acm-challenge-example/RUN_CLIENT](./debs-acm-challenge-example/RUN_CLIENT.md) for how to run our client locally
 
 ## Data + Local Evaluator Download
 
