@@ -37,6 +37,7 @@ uses a custom source to pull data from an API endpoint and processes it using Ap
 In your IDE (e.g., IntelliJ), create a new run configuration:
     - Set the module to ClientRef
     - Provide the argument: "http://127.0.0.1:8866"
+    - Add the option to "Add dependencies with 'provided' scope to classpath"
 2. Run the file
 
 ## Input and Output Data
