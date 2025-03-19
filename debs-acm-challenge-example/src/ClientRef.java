@@ -43,120 +43,130 @@ public class ClientRef {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         //Process our raw API Data to get our response Objects
         DataStream<JSONObject> apiData = env.addSource(new ApiSource(args))
-                .name("Faucet")
-                .map(batch -> {
-                    JSONObject result = new JSONObject();
-                    result.put("batch_id", batch.get("batch_id").toString());
-                    result.put("print_id", batch.get("print_id").toString());
-                    result.put("tile_id", batch.get("tile_id").toString());
-                    result.put("layer", batch.getInt("layer"));
+            .name("Faucet")
+            .map(batch -> {
+                JSONObject result = new JSONObject();
+                result.put("batch_id", batch.get("batch_id").toString());
+                result.put("print_id", batch.get("print_id").toString());
+                result.put("tile_id", batch.get("tile_id").toString());
+                result.put("layer", batch.getInt("layer"));
+                result.put("bench_id", batch.get("bench_id").toString());
 
-                    //TODO: Decode Image Data Correctly
-                    //Object tifObject = batch.get("tif");
+                //TODO: Decode Image Data Correctly
+                //Object tifObject = batch.get("tif");
 
-                    //Use Fake data for now. This creates an image where the top-left quadrant is all above the threshold, with all other values being 1.
-                    int rows = 10;
-                    int cols = 10;
-                    int[][] image = new int[rows][cols];
+                //Use Fake data for now. This creates an image where the top-left quadrant is all above the threshold, with all other values being 1.
+                int rows = 10;
+                int cols = 10;
+                int[][] image = new int[rows][cols];
 
-                    // Initialize ALL elements to 1
-                    for (int[] row : image) {
-                        Arrays.fill(row, 1);
+                // Initialize ALL elements to 1
+                for (int[] row : image) {
+                    Arrays.fill(row, 1);
+                }
+
+                // Top-left quadrant dimensions
+                int qRows = rows / 2;    // 125,000
+                int qCols = cols / 2;    // 250
+
+                for (int i = 0; i < qRows; i++) {
+                    for (int j = 0; j < qCols; j++) {
+                        image[i][j] = 65001;
                     }
+                }
+                result.put("image", new JSONArray(image));
 
-                    // Top-left quadrant dimensions
-                    int qRows = rows / 2;    // 125,000
-                    int qCols = cols / 2;    // 250
+                //Dummy output results.
+                result.put("centroids", new JSONArray());
 
-                    for (int i = 0; i < qRows; i++) {
-                        for (int j = 0; j < qCols; j++) {
-                            image[i][j] = 65001;
-                        }
-                    }
-                    result.put("image", new JSONArray(image));
-
-                    //Dummy output results.
-                    result.put("centroids", new JSONArray());
-
-//                    System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
-                    return result;
-                });
+                //System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
+                return result;
+            });
 
         //Stream to find saturated points per tile
         DataStream<JSONObject> apiDataWithSatPoints = apiData
-                .map(batch -> {
-                    //Count Saturated points for each batch
-                    JSONArray imageArray = batch.getJSONArray("image");
-                    int saturatedCount = 0;
+            .map(batch -> {
+                //Count Saturated points for each batch
+                JSONArray imageArray = batch.getJSONArray("image");
+                int saturatedCount = 0;
 
-                    // Scan entire 2D array
-                    for (int i = 0; i < imageArray.length(); i++) {
-                        JSONArray row = imageArray.getJSONArray(i);
-                        for (int j = 0; j < row.length(); j++) {
-                            if (row.getInt(j) > 65000) {
-                                saturatedCount++;
-                            }
+                // Scan entire 2D array
+                for (int i = 0; i < imageArray.length(); i++) {
+                    JSONArray row = imageArray.getJSONArray(i);
+                    for (int j = 0; j < row.length(); j++) {
+                        if (row.getInt(j) > 65000) {
+                            saturatedCount++;
                         }
                     }
+                }
 
-                    batch.put("saturated", saturatedCount);
-                    return batch;
+                batch.put("saturated", saturatedCount);
+                return batch;
 
-                });
+            });
 
+        //Create Window logic to store past three inclusive tiles for each tile that arrives.
+        //Output is Tuple of : JSON Tile Object itself for layer x, List of JSONObjects for the tiles for layer x, x-1,and x-2.
         DataStream<Tuple2<JSONObject, List<JSONObject>>> windowedStream = apiDataWithSatPoints
-                .keyBy(batch ->
-                        batch.getString("tile_id")
-                ).process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
+            .keyBy(batch ->
+                    batch.getString("tile_id")
+            ).process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
 
-                    //Store last three layers/tileID
-                    private transient ListState<JSONObject> windowState;
+                //Store last three layers/tileID
+                private transient ListState<JSONObject> windowState;
 
-                    @Override
-                    public void open(Configuration parameters) {
-                        windowState = getRuntimeContext().getListState(
-                                new ListStateDescriptor<>("layerWindow", JSONObject.class));
+                @Override
+                public void open(Configuration parameters) {
+                    windowState = getRuntimeContext().getListState(
+                            new ListStateDescriptor<>("layerWindow", JSONObject.class));
+                }
+
+                @Override
+                public void processElement(
+                        JSONObject batch,
+                        Context ctx,
+                        Collector<Tuple2<JSONObject, List<JSONObject>>> out) throws Exception {
+
+                    // Get current window state
+                    List<JSONObject> window = new ArrayList<>();
+                    windowState.get().forEach(window::add);
+
+                    // Add new batch to window
+                    window.add(batch);
+
+                    // Trim to last 3 layers
+                    if(window.size() > 3) {
+                        window = new ArrayList<>(window.subList(window.size() - 3, window.size()));
                     }
 
-                    @Override
-                    public void processElement(
-                            JSONObject batch,
-                            Context ctx,
-                            Collector<Tuple2<JSONObject, List<JSONObject>>> out) throws Exception {
+                    // Update state and emit
+                    windowState.update(window);
+                    out.collect(Tuple2.of(batch, window));
+                }
+            });
 
-                        // Get current window state
-                        List<JSONObject> window = new ArrayList<>();
-                        windowState.get().forEach(window::add);
-
-                        // Add new batch to window
-                        window.add(batch);
-
-                        // Trim to last 3 layers
-                        if(window.size() > 3) {
-                            window = new ArrayList<>(window.subList(window.size() - 3, window.size()));
-                        }
-
-                        // Update state and emit
-                        windowState.update(window);
-                        out.collect(Tuple2.of(batch, window));
-                    }
-                });
-
-        SingleOutputStreamOperator<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>> outlierDetectionStream =
-                windowedStream
-                        .map(new OutlierDetectionFunction())
-                        .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo())
-                        .map(tuple -> {
-//                            System.out.println("Detected " + tuple.f1.size() + " outliers.");
-                            return tuple;
-                        })
-                        .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo());
+        //Responsible for finding outliers for each tile we receive using the past three layers.
+        SingleOutputStreamOperator<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>> outlierDetectionStream = windowedStream
+            .map(new OutlierDetectionFunction())
+            .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo())
+            .map(tuple -> {
+                //System.out.println("Detected " + tuple.f1.size() + " outliers.");
+                return tuple;
+            })
+            .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo());
 
 
-        // Step 3: DBScan Clustering (output: enriched JSONObject)
-        DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction());
+        //DBScan Clustering using outlier values and post results
+        DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction())
+            .map(batch -> {
+                String endpoint = args[0];
+                String benchId = batch.getString("bench_id");
+                String i = batch.get("batch_id").toString();
 
+                //TODO: Create Post request using the above information to submit our results.
 
+                return batch;
+            });
 
         //Run the program.
         env.execute("Benchmark");
@@ -183,6 +193,7 @@ public class ClientRef {
                 JSONObject batch;
                 try {
                     batch = getNextBatch(endpoint, benchId);
+                    batch.put("bench_id", benchId);
                 } catch (JSONException e) {
                     System.out.println("Stopping - Invalid JSON response");
                     break;
