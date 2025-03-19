@@ -10,6 +10,7 @@ import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
@@ -77,7 +78,7 @@ public class ClientRef {
                     //Dummy output results.
                     result.put("centroids", new JSONArray());
 
-                    //System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
+//                    System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
                     return result;
                 });
 
@@ -103,9 +104,7 @@ public class ClientRef {
 
                 });
 
-        //Create Window logic to store past three inclusive tiles for each tile that arrives.
-        //Output is Tuple of : JSON Tile Object itself for layer x, List of JSONObjects for the tiles for layer x, x-1,and x-2.
-        DataStream<Tuple2<JSONObject, List<JSONObject>>> apiDataWithOutlierDetection = apiDataWithSatPoints
+        DataStream<Tuple2<JSONObject, List<JSONObject>>> windowedStream = apiDataWithSatPoints
                 .keyBy(batch ->
                         batch.getString("tile_id")
                 ).process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
@@ -142,6 +141,21 @@ public class ClientRef {
                         out.collect(Tuple2.of(batch, window));
                     }
                 });
+
+        SingleOutputStreamOperator<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>> outlierDetectionStream =
+                windowedStream
+                        .map(new OutlierDetectionFunction())
+                        .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo())
+                        .map(tuple -> {
+//                            System.out.println("Detected " + tuple.f1.size() + " outliers.");
+                            return tuple;
+                        })
+                        .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo());
+
+
+        // Step 3: DBScan Clustering (output: enriched JSONObject)
+        DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction());
+
 
 
         //Run the program.
