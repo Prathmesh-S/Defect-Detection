@@ -70,7 +70,7 @@ public class OutlierDetectionFunction implements MapFunction<Tuple2<JSONObject, 
                 if (d > 5000) {
                     OutlierPoint op = new OutlierPoint(i, j, d);
                     outliers.add(op);
-//                    System.out.println("Outlier detected at (" + i + ", " + j + ") with deviation: " + d);
+                    //System.out.println("Outlier detected at (" + i + ", " + j + ") with deviation: " + d);
                 }
             }
         }

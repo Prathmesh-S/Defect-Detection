@@ -44,12 +44,12 @@ public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<Outli
             double centroidRow = sumRow / cluster.points.size();
             double centroidCol = sumCol / cluster.points.size();
             JSONObject centroidObj = new JSONObject();
-            centroidObj.put("clusterId", cluster.clusterId);
-            centroidObj.put("centroidRow", centroidRow);
-            centroidObj.put("centroidCol", centroidCol);
-            centroidObj.put("size", cluster.points.size());
+            //centroidObj.put("clusterId", cluster.clusterId);
+            centroidObj.put("x", centroidRow);
+            centroidObj.put("y", centroidCol);
+            centroidObj.put("count", cluster.points.size());
             centroidsArray.put(centroidObj);
-            System.out.println("Cluster " + cluster.clusterId + ": Centroid (" + centroidRow + ", " + centroidCol + "), Size " + cluster.points.size());
+            //System.out.println("Cluster " + cluster.clusterId + ": Centroid (" + centroidRow + ", " + centroidCol + "), Size " + cluster.points.size());
         }
 
         batch.put("centroids", centroidsArray);
