@@ -1,23 +1,55 @@
 # DEBS'25 Grand Challenge local challenger
 
-This is the local client platform for the DEBS 2025 Grand Challenge.
-
-This implementation demonstrates a Flink-based benchmark for processing image data and analyzing outliers. The project 
+This is the local client platform for the DEBS 2025 Grand Challenge. This implementation demonstrates a Flink-based benchmark for processing image data and analyzing outliers. The project 
 uses a custom source to pull data from an API endpoint and processes it using Apache Flink.
 
 ## Prerequisites
-- Java
+- Java Development Kit (JDK) 11 or higher
 - Apache Maven
-- IntelliJ
-- Local evaluation platform running (refer to [/debs-acm-challenge-example/README](./debs-acm-challenge-example/README.md))
+- IntelliJ IDEA (or your favorite IDE)
+- Docker (for running the evaluation container)
+- Local Evaluation Platform
+  - Refer to the [/debs-acm-challenge-example/README](./debs-acm-challenge-example/README.md) for details on setting up the evaluation platform.
+- Data Files
+  - The actual evaluator and input data (TIFF images) is required to run the benchmark. The data is hosted on Google Drive. [Download the data here](https://drive.google.com/drive/folders/16QyqxShJ4dejY0uExaZUyYWN4F0amO3h?usp=sharing).
 
 ## Set Up
-To set up the code to run properly, go to debs-acm-challenge-example/src -> Right Click -> Mark Directory As -> Sources Root
+1. Clone the repository
+  ```
+  git clone https://github.com/CS-551/team-debs-2-debs-dubs.git
+  ```
+2. Make sure the evaluator and input data is downloaded. Unpack them and place the folders in the `debs-acm-challenge-example` directory.
+3. In IntelliJ, navigate to `debs-acm-challenge-example/src` and mark it as the "Sources Root" to ensure that the project compiles correctly.
+4. **Download Java Packages via Maven:** Go to the root directory (where pom.xml is located) and run:
+  ```
+  mvn clean package
+  ```
+5. To start up the local evaluator platform, run the following from the root directory:
+  ```
+  ./debs-acm-challenge-example/run.sh
+  ```
+  > Note: If this does not work you may have to run `chmod +x debs-acm-challenge-example/run.sh`
 
-## Running
 
-1. Create a new run configuration with `ClientRef` as the module and pass `"http://127.0.0.1:8866"` as an argument.
+## Running the Application
+
+1. **Create a Run Configuration:**
+In your IDE (e.g., IntelliJ), create a new run configuration:
+    - Set the module to ClientRef
+    - Provide the argument: "http://127.0.0.1:8866"
 2. Run the file
+
+## Input and Output Data
+**Input Data:**
+The input consists of TIFF image files with ZIP compression. Note that these files are currently using dummy data (for example, a 100x100 matrix with the top-left quadrant set to a threshold value).
+
+Output Data:
+The output is printed to the console, showing:
+
+- The layer number, tile ID, and batch ID for each processed batch.
+- The count of saturated image pixels (values above a given threshold).
+
+> Note: Because the data is dummy for now, the output will reflect the hard-coded values defined in the processing logic.
 
 # Contact
 
