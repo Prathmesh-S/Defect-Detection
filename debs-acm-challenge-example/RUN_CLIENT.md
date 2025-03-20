@@ -16,13 +16,13 @@ uses a custom source to pull data from an API endpoint and processes it using Ap
   ```
   git clone https://github.com/CS-551/team-debs-2-debs-dubs.git
   ```
-2. Make sure the evaluator and input data is downloaded. Unpack them and place the folders in the `debs-acm-challenge-example` directory if they are not already there.
+2. Make sure the evaluator and input data is downloaded. Unpack them and place the folders in the `debs-acm-challenge-example` directory. More specifically, add gc25cdocker.tar and the data folder in this directory. 
 3. In IntelliJ, navigate to `debs-acm-challenge-example/src` and mark it as the "Sources Root" to ensure that the project compiles correctly.
 4. **Download Java Packages via Maven:** Go to the root directory (where pom.xml is located) and run:
   ```
   mvn clean package
   ```
-5. To start up the local evaluator platform, run the following in a terminal from the root directory:
+5. Next, we will run a script to start a docker container. Thus, please have docker installed. To start up the local evaluator platform (which is how we will locally test), run the following in a terminal from the root directory:
   ```
   ./debs-acm-challenge-example/run.sh
   ```
@@ -32,10 +32,13 @@ uses a custom source to pull data from an API endpoint and processes it using Ap
 ## Running the Application
 
 1. **Create a Run Configuration:**
-In your IDE (e.g., IntelliJ), create a new run configuration:
-    - Set the module to ClientRef
-    - Provide the argument: "http://127.0.0.1:8866"
-    - Add the option to "Add dependencies with 'provided' scope to classpath"
+In your IDE (e.g., IntelliJ):
+    - Go to ClientRef.java
+    - If prompted, set up a Java SDK
+    - Now, back on ClientRef.java, click the green arrow next to the main method to modify the run configuration. If this does not show up, you may need to manually create a run configuration and set the module/mainClass = CLientRef.
+    - On the modify run configuration page, provide the argument: "http://127.0.0.1:8866"
+    - Add the option to "Add dependencies with 'provided' scope to classpath" by clicking "Modify Options"
+    - 
 2. Run the file
 
 ## Input and Output Data
