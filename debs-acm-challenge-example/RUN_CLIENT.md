@@ -31,7 +31,8 @@ uses a custom source to pull data from an API endpoint and processes it using Ap
 
 ## Running the Application
 
-1. **Create a Run Configuration:**
+1. Checkout branch tb/image-processing (our latest work with updated print statements + image decompression)
+2. **Create a Run Configuration:**
 In your IDE (e.g., IntelliJ):
     - Go to ClientRef.java
     - If prompted, set up a Java SDK
@@ -39,7 +40,7 @@ In your IDE (e.g., IntelliJ):
     - On the modify run configuration page, provide the argument: "http://127.0.0.1:8866"
     - Add the option to "Add dependencies with 'provided' scope to classpath" by clicking "Modify Options"
     - 
-2. Run the file
+3. Run the file
 
 ## Input and Output Data
 **Input Data:**
