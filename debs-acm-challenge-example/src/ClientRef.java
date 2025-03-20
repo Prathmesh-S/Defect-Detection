@@ -7,12 +7,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import javax.imageio.ImageIO;
 
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.DataStreamSink;
-import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.datastream.*;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
@@ -32,8 +31,9 @@ public class ClientRef {
 
     public static void main(String[] args) throws Exception {
 
-        //Create our data source in Flink
+        // Create our data source in Flink.
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
         //Process our raw API Data to get our response Objects
         DataStream<JSONObject> apiData = env.addSource(new ApiSource(args))
             .name("Faucet")
@@ -44,7 +44,6 @@ public class ClientRef {
                 result.put("tile_id", batch.get("tile_id").toString());
                 result.put("layer", batch.getInt("layer"));
                 result.put("bench_id", batch.get("bench_id").toString());
-
 
                 // Use ImageIO to load 16-bit TIFF data.
                 byte[] imageBytes = (byte[]) batch.get("tifBytes");
@@ -96,12 +95,12 @@ public class ClientRef {
 
                 batch.put("saturated", saturatedCount);
                 return batch;
-
             });
 
+        // Create a windowed stream (last 3 layers per tile).
         DataStream<Tuple2<JSONObject, List<JSONObject>>> windowedStream = apiDataWithSatPoints
-                .keyBy(batch -> batch.getString("tile_id"))
-                .process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
+            .keyBy(batch -> batch.getString("tile_id"))
+            .process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
 
                 // Store last three layers/tileID
                 private transient ListState<JSONObject> windowState;
@@ -113,41 +112,82 @@ public class ClientRef {
                 }
 
                 @Override
-                public void processElement(
-                        JSONObject batch,
-                        Context ctx,
-                        Collector<Tuple2<JSONObject, List<JSONObject>>> out) throws Exception {
-
-                    // Get current window state
+                public void processElement(JSONObject batch, Context ctx, Collector<Tuple2<JSONObject, List<JSONObject>>> out) throws Exception {
                     List<JSONObject> window = new ArrayList<>();
                     windowState.get().forEach(window::add);
-
-                    // Add new batch to window
                     window.add(batch);
-
-                    // Trim to last 3 layers
-                    if(window.size() > 3) {
+                    if (window.size() > 3) {
                         window = new ArrayList<>(window.subList(window.size() - 3, window.size()));
                     }
-
-                    // Update state and emit
                     windowState.update(window);
                     out.collect(Tuple2.of(batch, window));
                 }
             });
 
-        //Responsible for finding outliers for each tile we receive using the past three layers.
-        SingleOutputStreamOperator<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>> outlierDetectionStream = windowedStream
-            .map(new OutlierDetectionFunction())
-            .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo())
-            .map(tuple -> {
-                //System.out.println("Detected " + tuple.f1.size() + " outliers.");
-                return tuple;
+        // DEBUG OPERATOR (REMOVE FOR SUBMISSION):
+        DataStream<Tuple2<JSONObject, List<JSONObject>>> debugWindowedStream = windowedStream
+            .map(new MapFunction<Tuple2<JSONObject, List<JSONObject>>, Tuple2<JSONObject, List<JSONObject>>>() {
+                @Override
+                public Tuple2<JSONObject, List<JSONObject>> map(Tuple2<JSONObject, List<JSONObject>> windowedTuple) throws Exception {
+                    // Create a copy of the current batch and remove the "image" data.
+                    JSONObject currentBatch = new JSONObject(windowedTuple.f0.toString());
+                    currentBatch.remove("image");
+                    String currentBatchId = currentBatch.getString("batch_id");
+
+                    // Build an array of the other batch_ids in the window.
+                    JSONArray windowBatchIDs = new JSONArray();
+                    for (JSONObject batch : windowedTuple.f1) {
+                        String batchId = batch.getString("batch_id");
+                        windowBatchIDs.put(batchId);
+                    }
+
+                    // Print summary for verification.
+                    System.out.println("Batch " + currentBatchId + " window batch ids: " + windowBatchIDs);
+                    return windowedTuple;
+                }
             })
-            .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo());
+            .returns(new TypeHint<Tuple2<JSONObject, List<JSONObject>>>() {}.getTypeInfo());
+
+
+        // Use Outlier detection on window stream (CHANGE DEBUGWINDOWED STREAM TO WINDOWED STREAM FOR SUBMISSION)
+        DataStream<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>> outlierDetectionStream = debugWindowedStream
+                .map(new OutlierDetectionFunction())
+                .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo());
 
         // DBScan Clustering using outlier values and post results
         DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction());
+
+        // DEBUG OPERATOR (REMOVE FOR SUBMISSION): Print summary per batch, including cluster details.
+        DataStream<JSONObject> finalPrintStream = enrichedData
+            .map(new MapFunction<JSONObject, JSONObject>() {
+                @Override
+                public JSONObject map(JSONObject batch) throws Exception {
+                    // Retrieve the saturated count, outlier count, and number of clusters (centroids).
+                    int saturated = batch.getInt("saturated");
+                    int outlierCount = batch.getInt("outlier_count"); // Set in DBScanFunction.
+                    JSONArray centroidsArray = batch.getJSONArray("centroids");
+                    int clusters = centroidsArray.length();
+
+                    // Print the summary for this batch.
+                    System.out.println("Batch " + batch.get("batch_id") +
+                            ": Saturated points = " + saturated +
+                            ", Outliers = " + outlierCount +
+                            ", Clusters = " + clusters);
+
+                    // Print details for each cluster.
+                    for (int i = 0; i < centroidsArray.length(); i++) {
+                        JSONObject cluster = centroidsArray.getJSONObject(i);
+                        int clusterId = cluster.getInt("clusterId");
+                        double x = cluster.getDouble("x");
+                        double y = cluster.getDouble("y");
+                        int count = cluster.getInt("count");
+                        System.out.println("  Cluster " + clusterId + ": Centroid (" + x + ", " + y + "), Size " + count);
+                    }
+                    return batch;
+                }
+            })
+            .returns(JSONObject.class);
+
 
         env.execute("Benchmark");
     }
@@ -156,6 +196,7 @@ public class ClientRef {
     private static class ApiSource extends RichSourceFunction<JSONObject> {
         private volatile boolean isRunning = true;
         private final String[] args;
+        private static final int MAX_BATCHES = 100; // Set the desired number of batches
 
         private ApiSource(String[] args) {
             this.args = args;
@@ -168,7 +209,8 @@ public class ClientRef {
             startBench(endpoint, benchId);
 
             // Collect batches and break if we finish.
-            while (isRunning) {
+            int count = 0;
+            while (isRunning && count < MAX_BATCHES) {
                 JSONObject batch;
                 try {
                     batch = getNextBatch(endpoint, benchId);
@@ -178,6 +220,7 @@ public class ClientRef {
                     break;
                 }
                 ctx.collect(batch);
+                count++;
             }
             endBench(endpoint, benchId);
         }

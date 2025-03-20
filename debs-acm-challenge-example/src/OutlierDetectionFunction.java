@@ -2,7 +2,6 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -75,11 +74,11 @@ public class OutlierDetectionFunction implements MapFunction<Tuple2<JSONObject, 
                 }
             }
         }
-        System.out.println("Total outliers detected in batch " + batch.get("batch_id") + ": " + outliers.size());
+//        System.out.println("Total outliers detected in batch " + batch.get("batch_id") + ": " + outliers.size());
         return Tuple2.of(batch, outliers);
     }
 
-    // Define your outlier point class as a public static inner class.
+    // Define outlier point class as a public static inner class.
     public static class OutlierPoint {
         public int row;
         public int col;

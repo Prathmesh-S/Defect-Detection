@@ -2,7 +2,6 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.util.*;
 
 public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>, JSONObject> {
@@ -11,6 +10,7 @@ public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<Outli
     public JSONObject map(Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>> in) throws Exception {
         JSONObject batch = in.f0;
         List<OutlierDetectionFunction.OutlierPoint> outliers = in.f1;
+        batch.put("outlier_count", outliers.size());
 
         // Parameters for DBScan.
         double eps = 2.0;
@@ -44,7 +44,7 @@ public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<Outli
             double centroidRow = sumRow / cluster.points.size();
             double centroidCol = sumCol / cluster.points.size();
             JSONObject centroidObj = new JSONObject();
-            //centroidObj.put("clusterId", cluster.clusterId);
+            centroidObj.put("clusterId", cluster.clusterId);
             centroidObj.put("x", centroidRow);
             centroidObj.put("y", centroidCol);
             centroidObj.put("count", cluster.points.size());
