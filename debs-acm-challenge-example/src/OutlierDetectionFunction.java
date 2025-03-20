@@ -15,6 +15,7 @@ public class OutlierDetectionFunction implements MapFunction<Tuple2<JSONObject, 
 
         // If we don't have a full window, return an empty outlier list.
         if (window.size() < 3) {
+            System.out.println("Window size less than 3, skipping outlier detection for batch " + batch.get("batch_id"));
             return Tuple2.of(batch, new ArrayList<>());
         }
 
@@ -70,10 +71,11 @@ public class OutlierDetectionFunction implements MapFunction<Tuple2<JSONObject, 
                 if (d > 5000) {
                     OutlierPoint op = new OutlierPoint(i, j, d);
                     outliers.add(op);
-                    //System.out.println("Outlier detected at (" + i + ", " + j + ") with deviation: " + d);
+//                    System.out.println("Outlier detected at (" + i + ", " + j + ") with deviation: " + d);
                 }
             }
         }
+        System.out.println("Total outliers detected in batch " + batch.get("batch_id") + ": " + outliers.size());
         return Tuple2.of(batch, outliers);
     }
 

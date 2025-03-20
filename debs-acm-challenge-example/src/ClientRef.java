@@ -1,38 +1,31 @@
-import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferUShort;
 import java.awt.image.Raster;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.List;
+import javax.imageio.ImageIO;
 
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
-import org.json.*;
+import org.apache.flink.util.Collector;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessageUnpacker;
 import org.msgpack.value.Value;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.api.java.utils.ParameterTool;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.DataStreamSource;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.EventTimeSessionWindows;
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-import org.apache.flink.util.Collector;
 
-//ClientRef is in charge of collecting our data in a sink, running our pipeline, and outputting our results
 public class ClientRef {
 
     private static final String API_TOKEN = "polimi-deib";
@@ -52,41 +45,42 @@ public class ClientRef {
                 result.put("layer", batch.getInt("layer"));
                 result.put("bench_id", batch.get("bench_id").toString());
 
-                //TODO: Decode Image Data Correctly
-                //Object tifObject = batch.get("tif");
 
-                //Use Fake data for now. This creates an image where the top-left quadrant is all above the threshold, with all other values being 1.
-                int rows = 10;
-                int cols = 10;
-                int[][] image = new int[rows][cols];
-
-                // Initialize ALL elements to 1
-                for (int[] row : image) {
-                    Arrays.fill(row, 1);
+                // Use ImageIO to load 16-bit TIFF data.
+                byte[] imageBytes = (byte[]) batch.get("tifBytes");
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                if (image == null) {
+                    throw new RuntimeException("Failed to load image from raw bytes.");
                 }
+                int width = image.getWidth();
+                int height = image.getHeight();
 
-                // Top-left quadrant dimensions
-                int qRows = rows / 2;    // 125,000
-                int qCols = cols / 2;    // 250
-
-                for (int i = 0; i < qRows; i++) {
-                    for (int j = 0; j < qCols; j++) {
-                        image[i][j] = 65001;
+                // Access the 16-bit raw data.
+                Raster raster = image.getData();
+                if (!(raster.getDataBuffer() instanceof DataBufferUShort)) {
+                    throw new RuntimeException("Image is not 16-bit; unexpected data buffer type: " + raster.getDataBuffer().getClass());
+                }
+                DataBufferUShort dataBuffer = (DataBufferUShort) raster.getDataBuffer();
+                short[] rawData = dataBuffer.getData();
+                int[][] pixels = new int[height][width];
+                int idx = 0;
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        // Convert the signed short to an unsigned 16-bit value.
+                        int value = rawData[idx++] & 0xFFFF;
+                        pixels[y][x] = value;
                     }
                 }
-                result.put("image", new JSONArray(image));
-
-                //Dummy output results.
+                result.put("image", new JSONArray(pixels));
+                // Initialize dummy centroids array.
                 result.put("centroids", new JSONArray());
-
-                //System.out.println(result.getInt("layer") + ", " + result.getString("tile_id") + ", " + result.getString("batch_id"));
                 return result;
             });
 
-        //Stream to find saturated points per tile
+        // Stream to find saturated points per tile
         DataStream<JSONObject> apiDataWithSatPoints = apiData
             .map(batch -> {
-                //Count Saturated points for each batch
+                // Count Saturated points for each batch
                 JSONArray imageArray = batch.getJSONArray("image");
                 int saturatedCount = 0;
 
@@ -105,14 +99,11 @@ public class ClientRef {
 
             });
 
-        //Create Window logic to store past three inclusive tiles for each tile that arrives.
-        //Output is Tuple of : JSON Tile Object itself for layer x, List of JSONObjects for the tiles for layer x, x-1,and x-2.
         DataStream<Tuple2<JSONObject, List<JSONObject>>> windowedStream = apiDataWithSatPoints
-            .keyBy(batch ->
-                    batch.getString("tile_id")
-            ).process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
+                .keyBy(batch -> batch.getString("tile_id"))
+                .process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
 
-                //Store last three layers/tileID
+                // Store last three layers/tileID
                 private transient ListState<JSONObject> windowState;
 
                 @Override
@@ -155,24 +146,13 @@ public class ClientRef {
             })
             .returns(new TypeHint<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>>() {}.getTypeInfo());
 
+        // DBScan Clustering using outlier values and post results
+        DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction());
 
-        //DBScan Clustering using outlier values and post results
-        DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction())
-            .map(batch -> {
-                String endpoint = args[0];
-                String benchId = batch.getString("bench_id");
-                String i = batch.get("batch_id").toString();
-
-                //TODO: Create Post request using the above information to submit our results.
-
-                return batch;
-            });
-
-        //Run the program.
         env.execute("Benchmark");
     }
 
-    //Private class to create our data flink Source
+    // Flink source to get batch data.
     private static class ApiSource extends RichSourceFunction<JSONObject> {
         private volatile boolean isRunning = true;
         private final String[] args;
@@ -181,14 +161,13 @@ public class ClientRef {
             this.args = args;
         }
 
-        //The Run method will loop to get all of our Batch data
         @Override
         public void run(SourceContext<JSONObject> ctx) throws Exception {
             String endpoint = args[0];
             String benchId = createBench(endpoint);
             startBench(endpoint, benchId);
 
-            //Collect batches and break if we finish.
+            // Collect batches and break if we finish.
             while (isRunning) {
                 JSONObject batch;
                 try {
@@ -200,19 +179,16 @@ public class ClientRef {
                 }
                 ctx.collect(batch);
             }
-
-            //When we exit the loop, we are done with the entire benchmark.
             endBench(endpoint, benchId);
         }
 
-        //Called by Flink when needed to end the benchmark
         @Override
         public void cancel() {
             isRunning = false;
         }
     }
 
-    //Creates a benchmark.
+    // Creates a benchmark.
     private static String createBench(String endpoint) throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("apitoken", API_TOKEN);
@@ -228,86 +204,82 @@ public class ClientRef {
         return response;
     }
 
-    //Actually start the benchmark.
+    // Starts the benchmark.
     private static void startBench(String endpoint, String benchId) throws Exception {
         sendPostRequest(endpoint + "/api/start/" + benchId, "");
     }
 
-    //Get the next batch in the benchmark.
+    // Unpacks the MessagePack response to extract batch fields and the raw TIFF bytes.
     private static JSONObject getNextBatch(String endpoint, String benchId) throws Exception {
         byte[] responseBytes = sendGetRequestBytes(endpoint + "/api/next_batch/" + benchId);
-
-        // Unpack MessagePack bytes
         MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(responseBytes);
-        Value value = unpacker.unpackValue();
+        int mapSize = unpacker.unpackMapHeader();
+        JSONObject result = new JSONObject();
+        byte[] tifBytes = null;
+        for (int i = 0; i < mapSize; i++) {
+            String key = unpacker.unpackString();
+            if ("tif".equals(key)) {
+                int len = unpacker.unpackBinaryHeader();
+                tifBytes = unpacker.readPayload(len);
+            } else {
+                Value value = unpacker.unpackValue();
+                result.put(key, value.toJson());
+            }
+        }
         unpacker.close();
-
-        // Convert MessagePack value to JSON string
-        String jsonString = value.toJson();
-        return new JSONObject(jsonString);
+        if (tifBytes != null) {
+            result.put("tifBytes", tifBytes);
+        }
+        return result;
     }
 
-    //Helper method to send the GetRequest for our next batch in the benchmark.
+    // Helper method to send the GetRequest for our next batch in the benchmark.
     private static byte[] sendGetRequestBytes(String url) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
-
         int responseCode = conn.getResponseCode();
-        InputStream is = (responseCode >= 200 && responseCode < 300)
-                ? conn.getInputStream()
-                : conn.getErrorStream();
+        InputStream is = (responseCode >= 200 && responseCode < 300) ? conn.getInputStream() : conn.getErrorStream();
         if (is == null) {
             throw new IOException("No response received from server; response code: " + responseCode);
         }
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        int nRead;
         byte[] data = new byte[16384];
-        while ((nRead = is.read(data, 0, data.length)) != -1) {
+        int nRead;
+        while ((nRead = is.read(data)) != -1) {
             buffer.write(data, 0, nRead);
         }
         buffer.flush();
         return buffer.toByteArray();
     }
 
-    //Request to end the benchmark.
+    // Request to end the benchmark.
     private static void endBench(String endpoint, String benchId) throws Exception {
         sendPostRequest(endpoint + "/api/end/" + benchId, "");
     }
 
-    //Helper method to sent Post Request to end the benchmark.
+    // Helper method to sent Post Request to end the benchmark.
     private static String sendPostRequest(String url, String jsonPayload) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         conn.setDoOutput(true);
-
-        // Write the JSON payload to the request body.
         try (OutputStream os = conn.getOutputStream()) {
-            byte[] input = jsonPayload.getBytes("UTF-8");
-            os.write(input, 0, input.length);
+            byte[] input = jsonPayload.getBytes(StandardCharsets.UTF_8);
+            os.write(input);
             os.flush();
         }
-
-        // Get response code and select the proper stream.
         int responseCode = conn.getResponseCode();
-        InputStream is = (responseCode >= 200 && responseCode < 300)
-                ? conn.getInputStream()
-                : conn.getErrorStream();
-
+        InputStream is = (responseCode >= 200 && responseCode < 300) ? conn.getInputStream() : conn.getErrorStream();
         if (is == null) {
-            throw new IOException("No response received from server; response code: " + responseCode);
+            throw new IOException("No response received; response code: " + responseCode);
         }
-
-        // Read the full response.
         StringBuilder response = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) {
                 response.append(line);
             }
         }
-
         return response.toString();
     }
-
 }
