@@ -113,6 +113,7 @@ public class ClientRef {
         DataStream<Tuple2<JSONObject, List<JSONObject>>> windowedStream = apiDataWithSatPoints
             .keyBy(batch -> batch.getString("tile_id"))
                 .window(SlidingEventTimeWindows.of(Time.milliseconds(3), Time.milliseconds(1)))
+                .allowedLateness(Time.milliseconds(2))
                 .process(new ProcessWindowFunction<JSONObject, Tuple2<JSONObject, List<JSONObject>>, String, TimeWindow>() {
                     @Override
                     public void process(String key, Context context, Iterable<JSONObject> elements, Collector<Tuple2<JSONObject, List<JSONObject>>> out) {
