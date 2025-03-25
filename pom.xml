@@ -120,6 +120,13 @@ under the License.
             <version>1.0.0-alpha5</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.twelvemonkeys.imageio/imageio-tiff -->
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-tiff</artifactId>
+            <version>3.9.0</version>
+        </dependency>
+
     </dependencies>
 
     <build>

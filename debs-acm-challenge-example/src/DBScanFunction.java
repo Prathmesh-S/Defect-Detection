@@ -2,7 +2,6 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.util.*;
 
 public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>, JSONObject> {
@@ -11,12 +10,13 @@ public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<Outli
     public JSONObject map(Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>> in) throws Exception {
         JSONObject batch = in.f0;
         List<OutlierDetectionFunction.OutlierPoint> outliers = in.f1;
+        batch.put("outlier_count", outliers.size());
 
-        // Parameters for DBScan.
-        double eps = 2.0;
-        int minPts = 3;
+        // Adjusted parameters to match Python's DBSCAN.
+        double eps = 20.0;
+        int minPts = 5;
 
-        // Perform DBScan clustering.
+        // Perform DBSCAN clustering in 2D (using row and col).
         List<DBScanCluster> clusters = dbScan(outliers, eps, minPts);
 
         // Use a minheap to keep track of the top 10 clusters by size.
@@ -32,7 +32,7 @@ public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<Outli
         List<DBScanCluster> topClusterList = new ArrayList<>(topClusters);
         topClusterList.sort((a, b) -> Integer.compare(b.points.size(), a.points.size()));
 
-        // Compute centroids for the top clusters.
+        // Compute centroids for each top cluster.
         JSONArray centroidsArray = new JSONArray();
         for (DBScanCluster cluster : topClusterList) {
             double sumRow = 0;
@@ -44,12 +44,11 @@ public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<Outli
             double centroidRow = sumRow / cluster.points.size();
             double centroidCol = sumCol / cluster.points.size();
             JSONObject centroidObj = new JSONObject();
-            //centroidObj.put("clusterId", cluster.clusterId);
+            centroidObj.put("clusterId", cluster.clusterId);
             centroidObj.put("x", centroidRow);
             centroidObj.put("y", centroidCol);
             centroidObj.put("count", cluster.points.size());
             centroidsArray.put(centroidObj);
-            //System.out.println("Cluster " + cluster.clusterId + ": Centroid (" + centroidRow + ", " + centroidCol + "), Size " + cluster.points.size());
         }
 
         batch.put("centroids", centroidsArray);
