@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import javax.imageio.ImageIO;
 
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
@@ -15,6 +16,10 @@ import org.apache.flink.streaming.api.datastream.*;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -33,6 +38,12 @@ public class ClientRef {
 
         // Create our data source in Flink.
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+        //Define WaterMark strategy
+        WatermarkStrategy<JSONObject> watermarkStrategy = WatermarkStrategy
+                .<JSONObject>forMonotonousTimestamps()
+                .withTimestampAssigner((event, timestamp) -> event.getInt("layer"));
+
 
         //Process our raw API Data to get our response Objects
         DataStream<JSONObject> apiData = env.addSource(new ApiSource(args))
@@ -78,6 +89,7 @@ public class ClientRef {
 
         // Stream to find saturated points per tile
         DataStream<JSONObject> apiDataWithSatPoints = apiData
+            .assignTimestampsAndWatermarks(watermarkStrategy)
             .map(batch -> {
                 // Count Saturated points for each batch
                 JSONArray imageArray = batch.getJSONArray("image");
@@ -100,29 +112,20 @@ public class ClientRef {
         // Create a windowed stream (last 3 layers per tile).
         DataStream<Tuple2<JSONObject, List<JSONObject>>> windowedStream = apiDataWithSatPoints
             .keyBy(batch -> batch.getString("tile_id"))
-            .process(new KeyedProcessFunction<String, JSONObject, Tuple2<JSONObject, List<JSONObject>>>() {
+                .window(SlidingEventTimeWindows.of(Time.milliseconds(3), Time.milliseconds(1)))
+                .allowedLateness(Time.milliseconds(2))
+                .process(new ProcessWindowFunction<JSONObject, Tuple2<JSONObject, List<JSONObject>>, String, TimeWindow>() {
+                    @Override
+                    public void process(String key, Context context, Iterable<JSONObject> elements, Collector<Tuple2<JSONObject, List<JSONObject>>> out) {
+                        List<JSONObject> window = new ArrayList<>();
+                        elements.forEach(window::add);
 
-                // Store last three layers/tileID
-                private transient ListState<JSONObject> windowState;
-
-                @Override
-                public void open(Configuration parameters) {
-                    windowState = getRuntimeContext().getListState(
-                            new ListStateDescriptor<>("layerWindow", JSONObject.class));
-                }
-
-                @Override
-                public void processElement(JSONObject batch, Context ctx, Collector<Tuple2<JSONObject, List<JSONObject>>> out) throws Exception {
-                    List<JSONObject> window = new ArrayList<>();
-                    windowState.get().forEach(window::add);
-                    window.add(batch);
-                    if (window.size() > 3) {
-                        window = new ArrayList<>(window.subList(window.size() - 3, window.size()));
+                        if (window.size() == 3) {
+                            JSONObject currentLayer = window.get(window.size() - 1);
+                            out.collect(Tuple2.of(currentLayer, window));
+                        }
                     }
-                    windowState.update(window);
-                    out.collect(Tuple2.of(batch, window));
-                }
-            });
+                });
 
         // DEBUG OPERATOR (REMOVE FOR SUBMISSION):
         DataStream<Tuple2<JSONObject, List<JSONObject>>> debugWindowedStream = windowedStream
@@ -143,6 +146,19 @@ public class ClientRef {
 
                     // Print summary for verification.
                     System.out.println("Batch " + currentBatchId + " window batch ids: " + windowBatchIDs);
+                    if (windowedTuple.f1.size() >=3) {
+                        List<JSONObject> window = windowedTuple.f1;
+
+                        int batchId0 = Integer.parseInt(window.get(0).get("batch_id").toString());
+                        int batchId1 = Integer.parseInt(window.get(1).get("batch_id").toString());
+                        int batchId2 = Integer.parseInt(window.get(2).get("batch_id").toString());
+
+                        if ((batchId2 != batchId1 + 16) || (batchId1 != batchId0 + 16)) {
+                            System.out.println("\033[0;31mERROR, UNORDERED DATA: Batch " + currentBatchId + " window batch ids: " + windowBatchIDs + "\033[0m");
+                        }
+                    }
+
+
                     return windowedTuple;
                 }
             })
