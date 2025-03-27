@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: python-sample-solution-job
+  namespace: group-4
+spec:
+  template:
+    spec:
+      containers:
+        - name: client
+          image: omariani24/python-example-solution:latest
+          env:
+            - name: API_TOKEN
+              value: "API_TOKEN_HERE"
+      restartPolicy: OnFailure

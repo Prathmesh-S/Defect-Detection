@@ -5,4 +5,5 @@
 */input
 */gc25cdocker.tar
 .env
-*/SUBMIT_TO_EVAL_job.yaml
+**/appmap.log
+.idea
