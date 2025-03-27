@@ -1,0 +1,48 @@
+//Windowed Stream Debugging to print windows + any unorderedness in windowedStream.
+    String [] otherIDs = new String[window.size()];
+    for (int i = 0; i < window.size(); i++) {
+        otherIDs[i] = window.get(i).get("batch_id").toString();
+    }
+
+    //Only output for valid window
+    if ((window.size() == 3) || (Integer.parseInt(window.get(window.size() - 1).get("batch_id").toString()) <=31)) {
+        JSONObject currentLayer = window.get(window.size() - 1);
+        out.collect(Tuple2.of(currentLayer, window));
+        System.out.println("GOOD DATA: Batch " + window.get(window.size() - 1).get("batch_id") + " window batch ids: " + Arrays.toString(otherIDs) + "\033[0m");
+    } else {
+        //REMOVE FOR SUBMISSION. TESTING FOR ACTUAL DISORDER
+        if (Integer.parseInt(window.get(window.size() - 1).get("batch_id").toString()) + 16 < 3600) {
+            System.out.println("\033[0;31mERROR, UNORDERED DATA: Batch " + window.get(window.size() - 1).get("batch_id") + " window batch ids: " + Arrays.toString(otherIDs) + "\033[0m");
+        }
+    }
+
+// DEBUG OPERATOR (REMOVE FOR SUBMISSION): Print summary per batch, including cluster details.
+DataStream<JSONObject> finalPrintStream = enrichedData
+    .map(new MapFunction<JSONObject, JSONObject>() {
+        @Override
+        public JSONObject map(JSONObject batch) throws Exception {
+            // Retrieve the saturated count, outlier count, and number of clusters (centroids).
+            int saturated = batch.getInt("saturated");
+            int outlierCount = batch.getInt("outlier_count"); // Set in DBScanFunction.
+            JSONArray centroidsArray = batch.getJSONArray("centroids");
+            int clusters = centroidsArray.length();
+
+            // Print the summary for this batch.
+            System.out.println("Batch " + batch.get("batch_id") +
+                    ": Saturated points = " + saturated +
+                    ", Outliers = " + outlierCount +
+                    ", Clusters = " + clusters);
+
+            // Print details for each cluster.
+            for (int i = 0; i < centroidsArray.length(); i++) {
+                JSONObject cluster = centroidsArray.getJSONObject(i);
+                int clusterId = cluster.getInt("clusterId");
+                double x = cluster.getDouble("x");
+                double y = cluster.getDouble("y");
+                int count = cluster.getInt("count");
+                System.out.println("  Cluster " + clusterId + ": Centroid (" + x + ", " + y + "), Size " + count);
+            }
+            return batch;
+        }
+    })
+    .returns(JSONObject.class);
