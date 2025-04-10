@@ -82,37 +82,36 @@ public class DBScanFunction implements MapFunction<Tuple2<JSONObject, List<Outli
         Queue<OutlierDetectionFunction.OutlierPoint> seeds = new LinkedList<>(neighbors);
         while (!seeds.isEmpty()) {
             OutlierDetectionFunction.OutlierPoint current = seeds.poll();
-            if (!visited.contains(current)) {
-                visited.add(current);
+            // Optimize by combining visited check and insertion.
+            if (visited.add(current)) {
                 List<OutlierDetectionFunction.OutlierPoint> currentNeighbors = regionQuery(points, current, eps);
                 if (currentNeighbors.size() >= minPts) {
                     seeds.addAll(currentNeighbors);
                 }
             }
-            if (!cluster.points.contains(current)) {
-                cluster.points.add(current);
-            }
+            cluster.points.add(current);
         }
     }
 
     private List<OutlierDetectionFunction.OutlierPoint> regionQuery(List<OutlierDetectionFunction.OutlierPoint> points, OutlierDetectionFunction.OutlierPoint center, double eps) {
         List<OutlierDetectionFunction.OutlierPoint> neighbors = new ArrayList<>();
+        double epsSquared = eps * eps; // Pre-calculate eps squared to avoid repeated sqrt computations.
         for (OutlierDetectionFunction.OutlierPoint p : points) {
-            if (euclideanDistance(p, center) <= eps) {
+            double dx = p.row - center.row;
+            double dy = p.col - center.col;
+            // Use squared Euclidean distance for efficiency.
+            if (dx * dx + dy * dy <= epsSquared) {
                 neighbors.add(p);
             }
         }
         return neighbors;
     }
 
-    private double euclideanDistance(OutlierDetectionFunction.OutlierPoint a, OutlierDetectionFunction.OutlierPoint b) {
-        return Math.sqrt((a.row - b.row) * (a.row - b.row) + (a.col - b.col) * (a.col - b.col));
-    }
-
     // DBScan cluster helper class.
     private static class DBScanCluster {
         int clusterId;
-        List<OutlierDetectionFunction.OutlierPoint> points = new ArrayList<>();
+        // Changed to a HashSet for faster membership checks.
+        Set<OutlierDetectionFunction.OutlierPoint> points = new HashSet<>();
 
         DBScanCluster(int id) {
             this.clusterId = id;
