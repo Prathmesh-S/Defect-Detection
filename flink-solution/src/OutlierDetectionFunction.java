@@ -1,3 +1,5 @@
+package src;
+
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.json.JSONArray;

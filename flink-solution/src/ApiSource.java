@@ -1,3 +1,5 @@
+package src;
+
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -14,7 +16,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     private volatile boolean isRunning = true;
     private final String[] args;
     private static final int MAX_BATCHES = 100; // Set the desired number of batches
-    private static final String API_TOKEN = "polimi-deib";
+    private static final String API_TOKEN = "cxjbvgcftxxjmkhhtgkfivknvxsccgkr";
 
     public ApiSource(String[] args) {
         this.args = args;
@@ -54,7 +56,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
         payload.put("apitoken", API_TOKEN);
         payload.put("name", "unoptimized");
         payload.put("test", true);
-        payload.put("max_batches", JSONObject.NULL);
+//        payload.put("max_batches", JSONObject.NULL);
 
         //Get our response + clean it up.
         String response = sendPostRequest(endpoint + "/api/create", payload.toString());

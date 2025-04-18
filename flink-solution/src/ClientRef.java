@@ -1,3 +1,5 @@
+package src;
+
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferUShort;
 import java.awt.image.Raster;
@@ -21,10 +23,9 @@ import org.apache.flink.api.java.tuple.Tuple2;
 
 public class ClientRef {
 
-    private static final String API_TOKEN = "polimi-deib";
+    private static final String API_TOKEN = "cxjbvgcftxxjmkhhtgkfivknvxsccgkr";
 
     public static void main(String[] args) throws Exception {
-
         // Create our data source in Flink.
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
