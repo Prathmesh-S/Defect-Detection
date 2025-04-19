@@ -39,6 +39,9 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
                 break;
             }
             ctx.collect(batch);
+            //TODO: Connect this method to our processing so that we can submit real results
+            JSONObject result_payload = new JSONObject();
+            submitResults(endpoint, Integer.parseInt(benchId), count, result_payload);
             count++;
         }
         endBench(endpoint, benchId);
@@ -119,6 +122,12 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     // Request to end the benchmark.
     private static void endBench(String endpoint, String benchId) throws Exception {
         sendPostRequest(endpoint + "/api/end/" + benchId, "");
+    }
+
+    // sends results of processing to evaluator
+    private static void submitResults(String endpoint, int benchId, int batchId, JSONObject payload) throws Exception {
+        //TODO: make sure the q parameter (0) is fixed or not
+        sendPostRequest(endpoint + "/api/result/0/"+benchId+"/"+batchId, payload.toString());
     }
 
     // Helper method to sent Post Request to end the benchmark.
