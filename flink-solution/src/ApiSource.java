@@ -17,14 +17,31 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     private static final int MAX_BATCHES = 100; // Set the desired number of batches
     private static final String API_TOKEN = "cxjbvgcftxxjmkhhtgkfivknvxsccgkr";
 
+    private final String existingBenchId; // Optional existing benchId
+
+    // Original constructor
     public ApiSource(String[] args) {
         this.args = args;
+        this.existingBenchId = null;
+    }
+
+    // New constructor that accepts an existing benchId
+    public ApiSource(String[] args, String existingBenchId) {
+        this.args = args;
+        this.existingBenchId = existingBenchId;
     }
 
     @Override
     public void run(SourceContext<JSONObject> ctx) throws Exception {
         String endpoint = args[0];
-        String benchId = createBench(endpoint);
+        String benchId;
+
+        // Use the existing benchId if provided, otherwise create a new one
+        if (existingBenchId != null) {
+            benchId = existingBenchId;
+        } else {
+            benchId = createBench(endpoint);
+        }
         startBench(endpoint, benchId);
 
         // Collect batches and break if we finish.
@@ -41,7 +58,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
             ctx.collect(batch);
             //TODO: Connect this method to our processing so that we can submit real results
             JSONObject result_payload = new JSONObject();
-            submitResults(endpoint, Integer.parseInt(benchId), count, result_payload);
+            submitResults(endpoint, benchId, count, result_payload);
             count++;
         }
         endBench(endpoint, benchId);
@@ -53,7 +70,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     }
 
     // Creates a benchmark.
-    private static String createBench(String endpoint) throws Exception {
+    static String createBench(String endpoint) throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("apitoken", API_TOKEN);
         payload.put("name", "unoptimized");
@@ -125,7 +142,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     }
 
     // sends results of processing to evaluator
-    private static void submitResults(String endpoint, int benchId, int batchId, JSONObject payload) throws Exception {
+    static void submitResults(String endpoint, String benchId, int batchId, JSONObject payload) throws Exception {
         //TODO: make sure the q parameter (0) is fixed or not
         sendPostRequest(endpoint + "/api/result/0/"+benchId+"/"+batchId, payload.toString());
     }

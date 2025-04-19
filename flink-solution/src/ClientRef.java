@@ -33,6 +33,12 @@ public class ClientRef {
                 .<JSONObject>forMonotonousTimestamps()
                 .withTimestampAssigner((event, timestamp) -> event.getInt("layer"));
 
+        // Extract endpoint from args
+        String endpoint = args[0];
+
+        // Create bench ID (requires ApiSource.createBench to be public static)
+        String benchId = ApiSource.createBench(endpoint);
+
         //Get Our RAW API Data
         DataStream<JSONObject> apiData = env.addSource(new ApiSource(args))
                 .name("Faucet");
@@ -128,6 +134,10 @@ public class ClientRef {
 
         // DBScan Clustering using outlier values and post results
         DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction());
+
+//        enrichedData.addSink(new ResultSubmitterSink(endpoint, benchId));
+
+
 
         // DEBUG OPERATOR (REMOVE FOR SUBMISSION): Print summary per batch, including cluster details.
         DataStream<JSONObject> finalPrintStream = enrichedData
