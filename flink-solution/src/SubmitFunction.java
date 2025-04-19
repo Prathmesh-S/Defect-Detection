@@ -6,6 +6,8 @@ class ResultSubmitterSink implements SinkFunction<JSONObject> {
     private final String endpoint;
     private final String benchId;
 
+
+
     public ResultSubmitterSink(String endpoint, String benchId) {
         this.endpoint = endpoint;
         this.benchId = benchId;
@@ -17,6 +19,7 @@ class ResultSubmitterSink implements SinkFunction<JSONObject> {
         int batchId = value.getInt("batch_id"); // Assuming the batch ID is in your JSON
 
         // Submit the results to the API
-        ApiSource.submitResults(endpoint, benchId, batchId, value);
+        String response = ApiSource.submitResults(endpoint, benchId, batchId, value);
+        System.out.println("Submit response: "+response);
     }
 }

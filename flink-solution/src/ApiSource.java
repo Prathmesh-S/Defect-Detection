@@ -61,6 +61,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
             submitResults(endpoint, benchId, count, result_payload);
             count++;
         }
+        // Moving this elsewhere so that it doesn't prematurely end our benchmark
         endBench(endpoint, benchId);
     }
 
@@ -73,7 +74,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     static String createBench(String endpoint) throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("apitoken", API_TOKEN);
-        payload.put("name", "unoptimized");
+        payload.put("name", "optimized-4/19");
         payload.put("test", true);
 
         if (API_TOKEN.equals("polimi-deib")){
@@ -142,9 +143,10 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     }
 
     // sends results of processing to evaluator
-    static void submitResults(String endpoint, String benchId, int batchId, JSONObject payload) throws Exception {
+    static String submitResults(String endpoint, String benchId, int batchId, JSONObject payload) throws Exception {
         //TODO: make sure the q parameter (0) is fixed or not
-        sendPostRequest(endpoint + "/api/result/0/"+benchId+"/"+batchId, payload.toString());
+        String response = sendPostRequest(endpoint + "/api/result/0/"+benchId+"/"+batchId, payload.toString());
+        return response;
     }
 
     // Helper method to sent Post Request to end the benchmark.

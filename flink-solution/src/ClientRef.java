@@ -37,10 +37,12 @@ public class ClientRef {
         String endpoint = args[0];
 
         // Create bench ID (requires ApiSource.createBench to be public static)
+
         String benchId = ApiSource.createBench(endpoint);
+        ApiSource apiSource = new ApiSource(args, benchId);
 
         //Get Our RAW API Data
-        DataStream<JSONObject> apiData = env.addSource(new ApiSource(args))
+        DataStream<JSONObject> apiData = env.addSource(apiSource)
                 .name("Faucet");
 
         //Process our raw API Data to get our response Objects
@@ -135,7 +137,7 @@ public class ClientRef {
         // DBScan Clustering using outlier values and post results
         DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction());
 
-//        enrichedData.addSink(new ResultSubmitterSink(endpoint, benchId));
+        enrichedData.addSink(new ResultSubmitterSink(endpoint, benchId));
 
 
 
