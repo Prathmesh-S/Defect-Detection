@@ -1,4 +1,3 @@
-package src;
 
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.json.JSONException;
@@ -57,7 +56,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
         payload.put("name", "unoptimized");
         payload.put("test", true);
 
-        if (API_TOKEN == "polimi-deib"){
+        if (API_TOKEN.equals("polimi-deib")){
             payload.put("max_batches", JSONObject.NULL);
         }
 
@@ -124,6 +123,8 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
 
     // Helper method to sent Post Request to end the benchmark.
     private static String sendPostRequest(String url, String jsonPayload) throws Exception {
+        //UNCOMMENT TO DEBUG
+//        System.out.println("Sending Payload + URL: " + jsonPayload + " " + url);
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
@@ -145,6 +146,9 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
                 response.append(line);
             }
         }
+        //UNCOMMENT TO DEBUG
+//        System.out.println("response: " + response);
+
         return response.toString();
     }
 }

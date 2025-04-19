@@ -7,6 +7,6 @@
 .env
 **/appmap.log
 .idea
-/Cluster-Analysis.iml
+**/Cluster-Analysis.iml
 /dependency-reduced-pom.xml
 /target
