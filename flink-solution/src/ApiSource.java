@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 public class ApiSource extends RichSourceFunction<JSONObject> {
     private volatile boolean isRunning = true;
     private final String[] args;
-    private static final int MAX_BATCHES = 100; // Set the desired number of batches
+    public static final int MAX_BATCHES = 100; // Set the desired number of batches
     private static final String API_TOKEN = "cxjbvgcftxxjmkhhtgkfivknvxsccgkr";
 
     private final String existingBenchId; // Optional existing benchId
@@ -62,7 +62,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
             count++;
         }
         // Moving this elsewhere so that it doesn't prematurely end our benchmark
-        endBench(endpoint, benchId);
+//        endBench(endpoint, benchId);
     }
 
     @Override
@@ -138,7 +138,7 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
     }
 
     // Request to end the benchmark.
-    private static void endBench(String endpoint, String benchId) throws Exception {
+    static void endBench(String endpoint, String benchId) throws Exception {
         sendPostRequest(endpoint + "/api/end/" + benchId, "");
     }
 

@@ -6,8 +6,11 @@ import java.io.*;
 import java.util.*;
 import javax.imageio.ImageIO;
 
+import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.core.execution.JobClient;
+import org.apache.flink.core.execution.JobListener;
 import org.apache.flink.streaming.api.datastream.*;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
@@ -22,9 +25,9 @@ import org.apache.flink.api.java.tuple.Tuple2;
 
 public class ClientRef {
 
-    private static final String API_TOKEN = "cxjbvgcftxxjmkhhtgkfivknvxsccgkr";
 
     public static void main(String[] args) throws Exception {
+
         // Create our data source in Flink.
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
@@ -40,6 +43,26 @@ public class ClientRef {
 
         String benchId = ApiSource.createBench(endpoint);
         ApiSource apiSource = new ApiSource(args, benchId);
+
+        // Register the job listener to end the benchmark when the job completes
+        env.registerJobListener(new JobListener() {
+            @Override
+            public void onJobSubmitted(JobClient jobClient, Throwable throwable) {
+                // Job submitted, nothing to do yet
+            }
+
+            @Override
+            public void onJobExecuted(JobExecutionResult jobExecutionResult, Throwable throwable) {
+                // Job has completed, now we can end the benchmark
+                try{
+                    ApiSource.endBench(endpoint, benchId);
+                    System.out.println("Job completed, ended benchmark: " + benchId);
+                } catch (Exception e) {
+                    System.err.println("Failed to end benchmark: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        });
 
         //Get Our RAW API Data
         DataStream<JSONObject> apiData = env.addSource(apiSource)
@@ -138,6 +161,8 @@ public class ClientRef {
         DataStream<JSONObject> enrichedData = outlierDetectionStream.map(new DBScanFunction());
 
         enrichedData.addSink(new ResultSubmitterSink(endpoint, benchId));
+
+
 
 
 
