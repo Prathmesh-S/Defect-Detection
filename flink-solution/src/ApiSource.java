@@ -56,7 +56,10 @@ public class ApiSource extends RichSourceFunction<JSONObject> {
         payload.put("apitoken", API_TOKEN);
         payload.put("name", "unoptimized");
         payload.put("test", true);
-//        payload.put("max_batches", JSONObject.NULL);
+
+        if (API_TOKEN == "polimi-deib"){
+            payload.put("max_batches", JSONObject.NULL);
+        }
 
         //Get our response + clean it up.
         String response = sendPostRequest(endpoint + "/api/create", payload.toString());
