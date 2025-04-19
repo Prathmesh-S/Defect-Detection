@@ -130,6 +130,7 @@ under the License.
     </dependencies>
 
     <build>
+        <finalName>DEBS-ACM-Winner</finalName>
         <plugins>
 
             <!-- Java Compiler -->
