@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: debs-acm-flink-solution-job
+  namespace: group-4
+spec:
+  template:
+    spec:
+      containers:
+        - name: debs-acm-flink-solution-container
+          image: omariani24/debs-acm-flink-work:latest
+          env:
+            - name: API_TOKEN
+              value: "cxjbvgcftxxjmkhhtgkfivknvxsccgkr"
+          resources:
+            requests:
+              memory: "2Gi"  # Minimum memory requested
+            limits:
+              memory: "4Gi"  # Maximum memory allowed
+      restartPolicy: OnFailure

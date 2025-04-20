@@ -1,4 +1,4 @@
-
+package main.java.solution;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferUShort;
 import java.awt.image.Raster;

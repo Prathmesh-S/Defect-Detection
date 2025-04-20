@@ -130,7 +130,7 @@ under the License.
     </dependencies>
 
     <build>
-        <finalName>DEBS-ACM-Winner</finalName>
+        <finalName>DEBS-ACM-Solution</finalName>
         <plugins>
 
             <!-- Java Compiler -->
@@ -180,7 +180,7 @@ under the License.
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>clusterdata.exercise1.JobSchedulingLatency</mainClass>
+                                    <mainClass>solution.ClientRef</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>

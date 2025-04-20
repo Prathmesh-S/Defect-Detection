@@ -1,3 +1,4 @@
+package main.java.solution;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.json.JSONObject;
 
