@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,25 +20,29 @@ spec:
         - name: jobmanager
           image: apache/flink:1.20.1-scala_2.12
           ports:
-            - name: rpc
-              containerPort: 6123
-            - name: rest
-              containerPort: 8081
+            - containerPort: 6123
+            - containerPort: 8081
           env:
             - name: JOB_MANAGER_RPC_ADDRESS
-              value: "flink-jobmanager"
+              value: "flink-jobmanager"  # Updated: Use service name
             - name: FLINK_PROPERTIES
               value: |
-                jobmanager.rpc.address:flink-jobmanager
-                jobmanager.rpc.port:6123
-                rest.address:flink-jobmanager
+                jobmanager.rpc.address: flink-jobmanager  # Updated: Use service name
+                jobmanager.rpc.port: 6123
+                rest.address: flink-jobmanager  # Updated: Use service name
                 rest.bind-address: 0.0.0.0
                 rest.port: 8081
                 taskmanager.numberOfTaskSlots: 4
-                parallelism.default:1
+                parallelism.default: 1
           args:
             - jobmanager
-
+          livenessProbe:
+            httpGet:
+              path: /taskmanagers
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 10
 ---
 apiVersion: v1
 kind: Service
@@ -55,7 +60,6 @@ spec:
     - name: rest
       port: 8081
       targetPort: 8081
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -78,38 +82,27 @@ spec:
         - name: taskmanager
           image: apache/flink:1.20.1-scala_2.12
           ports:
-            - name: taskmanager
-              containerPort: 6121
+            - containerPort: 6121
           env:
             - name: JOB_MANAGER_RPC_ADDRESS
-              value: "flink-jobmanager"
+              value: "flink-jobmanager"  # Updated: Use service name
             - name: FLINK_PROPERTIES
               value: |
-                jobmanager.rpc.address:flink-jobmanager
-                jobmanager.rpc.port:6123
-                rest.address:flink-jobmanager
-                rest.bind-address:0.0.0.0
-                rest.port:8081
-                taskmanager.numberOfTaskSlots:4
-                parallelism.default:1
+                jobmanager.rpc.address: flink-jobmanager  # Updated: Use service name
+                jobmanager.rpc.port: 6123
+                rest.address: flink-jobmanager  # Updated: Use service name
+                rest.bind-address: 0.0.0.0
+                rest.port: 8081
+                taskmanager.numberOfTaskSlots: 4
+                parallelism.default: 1
           args:
             - taskmanager
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: flink-taskmanager
-  namespace: group-4
-spec:
-  selector:
-    app: flink
-    role: taskmanager
-  ports:
-    - name: taskmanager
-      port: 6121
-      targetPort: 6121
-
+          livenessProbe:
+            tcpSocket:
+              port: 6121
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 10
 ---
 apiVersion: batch/v1
 kind: Job
@@ -117,6 +110,7 @@ metadata:
   name: debs-acm-flink-solution-job
   namespace: group-4
 spec:
+  backoffLimit: 10
   template:
     spec:
       containers:
@@ -124,21 +118,4 @@ spec:
           image: omariani24/debs-acm-flink-work:latest
           env:
             - name: API_TOKEN
-              value: "cxjbvgcftxxjmkhhtgkfivknvxsccgkr"
-            - name: JOB_MANAGER_RPC_ADDRESS
-              value: "flink-jobmanager"
-            - name: FLINK_PROPERTIES
-              value: |
-                jobmanager.rpc.address:flink-jobmanager
-                jobmanager.rpc.port:6123
-                rest.address:flink-jobmanager
-                rest.bind-address:0.0.0.0
-                rest.port:8081
-                taskmanager.numberOfTaskSlots:4
-                parallelism.default:1
-          resources:
-            requests:
-              memory: "2Gi"
-            limits:
-              memory: "4Gi"
-      restartPolicy: OnFailure
+              value: "cxjbvgcftxxjmkhhtgkfivknv
