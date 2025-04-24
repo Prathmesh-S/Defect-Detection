@@ -8,7 +8,7 @@ import java.util.List;
 
 public class OutlierDetectionFunction implements MapFunction<Tuple2<JSONObject, List<JSONObject>>, Tuple2<JSONObject, List<OutlierDetectionFunction.OutlierPoint>>> {
 
-    // Outlier Detection Parameters
+    // Outlier Detection Parameters (taken from python naive solution).
     private static final int EMPTY_THRESHOLD = 5000;
     private static final int SATURATION_THRESHOLD = 65000;
     private static final int DISTANCE_THRESHOLD = 2;
@@ -25,16 +25,14 @@ public class OutlierDetectionFunction implements MapFunction<Tuple2<JSONObject, 
             return Tuple2.of(batch, new ArrayList<>());
         }
 
-        // Build a 3D array (depth x rows x cols) from the window data.
-        // The current layer (the last in the window) defines the dimensions.
+        // Build a 3D array from the window.
         JSONObject currentLayer = window.get(window.size() - 1);
         JSONArray imageArray = currentLayer.getJSONArray("image");
-        final int rows = imageArray.length();
-        final int cols = imageArray.getJSONArray(0).length();
-        final int depth = window.size();
+        int rows = imageArray.length();
+        int cols = imageArray.getJSONArray(0).length();
+        int depth = window.size();
         int[][][] images = new int[depth][rows][cols];
 
-        // Convert each JSONObject image into a primitive int array.
         for (int l = 0; l < depth; l++) {
             JSONArray img = window.get(l).getJSONArray("image");
             for (int i = 0; i < rows; i++) {
@@ -45,73 +43,53 @@ public class OutlierDetectionFunction implements MapFunction<Tuple2<JSONObject, 
             }
         }
 
-        // Precompute neighbor offsets for the entire window.
-        // Each entry in neighborOffsets is an int array: [d, di, dj, manhattan]
-        // where 'd' is the depth index, 'di' and 'dj' are the row and column offsets,
-        // and 'manhattan' is the Manhattan distance from the current pixel.
-        List<int[]> neighborOffsets = new ArrayList<>();
-        for (int d = 0; d < depth; d++) {
-            int depthDiff = (depth - 1) - d;  // how far a given layer is from the current layer.
-            // Offsets extend from -2*DISTANCE_THRESHOLD to 2*DISTANCE_THRESHOLD.
-            for (int di = -2 * DISTANCE_THRESHOLD; di <= 2 * DISTANCE_THRESHOLD; di++) {
-                for (int dj = -2 * DISTANCE_THRESHOLD; dj <= 2 * DISTANCE_THRESHOLD; dj++) {
-                    int manhattan = Math.abs(di) + Math.abs(dj) + depthDiff;
-                    if (manhattan <= 2 * DISTANCE_THRESHOLD) {
-                        neighborOffsets.add(new int[]{d, di, dj, manhattan});
-                    }
-                }
-            }
-        }
-
-        // Outlier detection: examine each pixel (i, j) in the current layer.
+        // Outlier detection logic:
         List<OutlierPoint> outliers = new ArrayList<>();
-        final int currentLayerIndex = depth - 1;
+        // Loop over each pixel (i, j) in the current (last) layer.
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                int currentPixel = images[currentLayerIndex][i][j];
-                // Skip pixels outside the valid intensity range.
+                int currentPixel = images[depth - 1][i][j];
+                // Skip pixels that are outside the valid range.
                 if (currentPixel <= EMPTY_THRESHOLD || currentPixel >= SATURATION_THRESHOLD) {
                     continue;
                 }
 
-                double closeNeighborSum = 0.0;
-                int closeNeighborCount = 0;
-                double outerNeighborSum = 0.0;
-                int outerNeighborCount = 0;
-
-                // Iterate over precomputed neighbor offsets.
-                for (int[] offset : neighborOffsets) {
-                    int d = offset[0];
-                    int di = offset[1];
-                    int dj = offset[2];
-                    int manhattan = offset[3];
-
-                    // Compute the neighbor's absolute coordinates.
-                    int ii = i + di;
-                    int jj = j + dj;
-                    // Inline boundary check for rows and columns.
-                    if (ii < 0 || ii >= rows || jj < 0 || jj >= cols) {
-                        continue; // Skip out-of-bound neighbors.
-                    }
-
-                    double neighborValue = images[d][ii][jj];
-                    // Based on Manhattan distance, classify as a close or outer neighbor.
-                    if (manhattan <= DISTANCE_THRESHOLD) {
-                        closeNeighborSum += neighborValue;
-                        closeNeighborCount++;
-                    } else {  // Automatically in range: (DISTANCE_THRESHOLD, 2*DISTANCE_THRESHOLD]
-                        outerNeighborSum += neighborValue;
-                        outerNeighborCount++;
+                // Compute close neighbours (within DISTANCE_THRESHOLD).
+                double cnSum = 0.0;
+                int cnCount = 0;
+                for (int j_offset = -DISTANCE_THRESHOLD; j_offset <= DISTANCE_THRESHOLD; j_offset++) {
+                    for (int i_offset = -DISTANCE_THRESHOLD; i_offset <= DISTANCE_THRESHOLD; i_offset++) {
+                        for (int d = 0; d < depth; d++) {
+                            int manhattan = Math.abs(i_offset) + Math.abs(j_offset) + Math.abs((depth - 1) - d);
+                            if (manhattan <= DISTANCE_THRESHOLD) {
+                                cnSum += getPadded(images, d, i + i_offset, j + j_offset);
+                                cnCount++;
+                            }
+                        }
                     }
                 }
 
-                // Calculate means (with protection against division by zero).
-                double meanClose = (closeNeighborCount > 0) ? closeNeighborSum / closeNeighborCount : 0.0;
-                double meanOuter = (outerNeighborCount > 0) ? outerNeighborSum / outerNeighborCount : 0.0;
+                // Compute outer neighbours (between DISTANCE_THRESHOLD and 2*DISTANCE_THRESHOLD).
+                double onSum = 0.0;
+                int onCount = 0;
+                for (int j_offset = -2 * DISTANCE_THRESHOLD; j_offset <= 2 * DISTANCE_THRESHOLD; j_offset++) {
+                    for (int i_offset = -2 * DISTANCE_THRESHOLD; i_offset <= 2 * DISTANCE_THRESHOLD; i_offset++) {
+                        for (int d = 0; d < depth; d++) {
+                            int manhattan = Math.abs(i_offset) + Math.abs(j_offset) + Math.abs((depth - 1) - d);
+                            if (manhattan > DISTANCE_THRESHOLD && manhattan <= 2 * DISTANCE_THRESHOLD) {
+                                onSum += getPadded(images, d, i + i_offset, j + j_offset);
+                                onCount++;
+                            }
+                        }
+                    }
+                }
+
+                double meanClose = (cnCount > 0) ? cnSum / cnCount : 0.0;
+                double meanOuter = (onCount > 0) ? onSum / onCount : 0.0;
                 double deviation = Math.abs(meanClose - meanOuter);
 
-                // If deviation exceeds the defined threshold, register as an outlier.
-                if (deviation > OUTLIER_THRESHOLD) {
+                // If deviation exceeds threshold, mark as an outlier.
+                if (currentPixel > EMPTY_THRESHOLD && currentPixel < SATURATION_THRESHOLD && deviation > OUTLIER_THRESHOLD) {
                     outliers.add(new OutlierPoint(i, j, deviation));
                 }
             }
