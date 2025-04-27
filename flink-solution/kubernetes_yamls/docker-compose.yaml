@@ -5,7 +5,7 @@ services:
     image: omariani24/debs-acm-flink-work:latest
     container_name: jobmanager
     entrypoint: /docker-entrypoint.sh standalone-job
-    command: ["--job-classname", "main.java.solution.ClientRef", "http://challenge2025.debs.org:52923"]
+    command: ["--job-classname", "solution.ClientRef", "http://challenge2025.debs.org:52923"]
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
@@ -17,6 +17,8 @@ services:
     image: flink:1.20.1-scala_2.12
     container_name: taskmanager
     command: taskmanager
+    volumes:
+      - ../target/DEBS-ACM-Solution.jar:/opt/flink/usrlib/DEBS-ACM-Solution.jar
     depends_on:
       - jobmanager
     environment:
