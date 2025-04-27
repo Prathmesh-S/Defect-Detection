@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  jobmanager:
+    image: omariani24/debs-acm-flink-work:latest
+    container_name: jobmanager
+    entrypoint: /docker-entrypoint.sh standalone-job
+    command: ["--job-classname", "main.java.solution.ClientRef", "http://challenge2025.debs.org:52923"]
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+    networks:
+      - flink-net
+
+  taskmanager:
+    #The official image set as taskmanager.
+    image: flink:1.19.1-scala_2.12
+    container_name: taskmanager
+    command: taskmanager
+    depends_on:
+      - jobmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+    networks:
+      - flink-net
+
+networks:
+  flink-net:
+    driver: bridge
