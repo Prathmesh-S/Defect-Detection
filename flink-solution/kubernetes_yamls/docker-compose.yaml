@@ -14,7 +14,7 @@ services:
 
   taskmanager:
     #The official image set as taskmanager.
-    image: flink:1.19.1-scala_2.12
+    image: flink:1.20.1-scala_2.12
     container_name: taskmanager
     command: taskmanager
     depends_on:

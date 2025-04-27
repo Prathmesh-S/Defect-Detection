@@ -1,4 +1,4 @@
-package main.java.solution;
+package solution;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferUShort;
 import java.awt.image.Raster;
@@ -9,6 +9,7 @@ import javax.imageio.ImageIO;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.core.execution.JobListener;
 import org.apache.flink.streaming.api.datastream.*;
@@ -133,7 +134,7 @@ public class ClientRef {
 
         // Create a windowed stream (last 3 layers per tile).
         DataStream<Tuple2<JSONObject, List<JSONObject>>> windowedStream = apiDataWithSatPoints
-                .keyBy(batch -> batch.getString("tile_id"))
+                .keyBy(new TileIdKeySelector())
                 .window(SlidingEventTimeWindows.of(Time.milliseconds(3), Time.milliseconds(1)))
                 .allowedLateness(Time.milliseconds(2))
                 .process(new ProcessWindowFunction<JSONObject, Tuple2<JSONObject, List<JSONObject>>, String, TimeWindow>() {
@@ -200,4 +201,12 @@ public class ClientRef {
 
         env.execute("Benchmark");
     }
+
+    public static class TileIdKeySelector implements KeySelector<JSONObject, String> {
+        @Override
+        public String getKey(JSONObject batch) {
+            return batch.getString("tile_id");
+        }
+    }
+
 }
