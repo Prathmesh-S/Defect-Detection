@@ -1,6 +1,6 @@
 #!/bin/bash
 # create new pods
-kubectl apply -f ../kubernetes_yamls/piazza_attempt.yaml
+kubectl apply -f ../kubernetes_yamls/kubernetes_adaptation.yaml
 
 # get all pods to delete from
 sleep 2

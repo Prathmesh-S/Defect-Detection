@@ -1,4 +1,4 @@
-package main.java.solution;
+package solution;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.json.JSONException;
 import org.json.JSONObject;
