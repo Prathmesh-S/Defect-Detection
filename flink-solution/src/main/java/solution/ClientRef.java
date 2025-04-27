@@ -38,14 +38,7 @@ public class ClientRef {
                 .withTimestampAssigner((event, timestamp) -> event.getInt("layer"));
 
         // Extract endpoint from args
-        System.out.print("ARGS: ");
-        for(int i =0; i < args.length; i++){
-            System.out.print(args[i] +", ");
-        }
-        String endpoint = Arrays.stream(args)
-                .filter(arg -> arg.startsWith("http://"))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("No endpoint starting with http:// found in args"));
+        String endpoint="http://challenge2025.debs.org:52923";
 
         // Create bench ID (requires ApiSource.createBench to be public static)
 
