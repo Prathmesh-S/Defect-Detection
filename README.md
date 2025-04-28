@@ -11,6 +11,12 @@
 - follow [/flink-solution/deployment-scripts/README.md](./flink-solution/deployment-scripts/README.md) for how to spin up a local Kubernetes cluster using *Kind* and *Kubectl*
 - follow [/flink-solution/docker_compose_solution/README.md](./flink-solution/docker_compose_solution/README.md) for how to spin up a local cluster using *Docker Compose*
 
+`/tests` - correctness tests we created that compare the outputs of sample solution to our solution
+
+`/visualizations` - scripts used to create the plots and charts used to display performance and the problem
+
+`/documentation` - design documents and meeting notes from our planning meetings
+
 ## Data + Local Evaluator Download
 
 The data needed to run the example project is too large to store on GitHub. Please download it from this link:
