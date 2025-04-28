@@ -38,7 +38,10 @@ public class ClientRef {
                 .withTimestampAssigner((event, timestamp) -> event.getInt("layer"));
 
         // Extract endpoint from args
-        String endpoint="http://challenge2025.debs.org:52923";
+        String endpoint = Arrays.stream(args)
+                .filter(arg -> arg.startsWith("http://"))
+                .findFirst()
+                .orElse("http://challenge2025.debs.org:52923"); // fallback if none provided
 
         // Create bench ID (requires ApiSource.createBench to be public static)
 
