@@ -5,7 +5,11 @@
 `/debs-acm-challenge-example` - the example given by the organizing body
 
 - follow [/debs-acm-challenge-example/README](./debs-acm-challenge-example/README.md) for how to run the docker container with the data
+
+`/flink-solution` - our Apache Flink Application that handles the same task with better performance and guarantees
 - follow [/debs-acm-challenge-example/RUN_CLIENT](./debs-acm-challenge-example/RUN_CLIENT.md) for how to run our client locally
+- follow [/flink-solution/deployment-scripts/README.md](./flink-solution/deployment-scripts/README.md) for how to spin up a local Kubernetes cluster using *Kind* and *Kubectl*
+- follow [/flink-solution/docker_compose_solution/README.md](./flink-solution/docker_compose_solution/README.md) for how to spin up a local cluster using *Docker Compose*
 
 ## Data + Local Evaluator Download
 
